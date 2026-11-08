@@ -125,3 +125,79 @@ Vite 开发环境会将内部的 \0 ID 编码成浏览器可请求的 URL，例�
   >`this.warn()`	输出警告，通常不会中断构建
   >`this.error()`	抛出插件错误，中断当前处理流程
 
+### 插件生命周期
+
+Vite 插件生命周期可以分为三个阶段：
+1. 配置解析阶段
+2. 开发服务器或构建初始化阶段
+3. 模块处理与结束阶段
+
+![](./plugin_life.png)
+
+![](./config.png)
+
+- 配置解析阶段
+> config:  修改配置  Vite 会将返回的配置与现有配置进行深度合并
+
+> resolvedConfig:  读取最终的配置
+
+- 开发服务器初始化阶段
+> configureServer:  只在开发服务器启动时调用, 生产构建不会调用
+> 主要用于获取开发服务器实例，以及注册中间件
+
+插件之间的顺序：看解析后的插件顺序。
+前置和后置的相对位置：看是否通过返回函数注册。
+请求是否继续向后执行：看中间件有没有调用 next()
+
+configureServer 执行时，Vite 内部中间件尚未全部安装
+
+** 前置中间件:直接调用 server.middlewares.use()：注册的中间件位于 Vite 内部中间件之前。**
+```js
+/*
+适合：
+- 拦截特定请求。
+- 自定义 API 接口。
+- 在 Vite 处理请求之前进行权限检查。
+- 记录请求日志。
+*/
+configureServer(server) {
+  server.middlewares.use((req, res, next) => {
+    console.log('[前置中间件]', req.url)
+    next()
+  })
+}
+```
+** 后置中间间: 从 configureServer 返回一个函数, 这个函数会在 Vite 内部中间件安装完成后执行，可以在其中注册后置中间件。**
+
+```js
+configureServer(server) {
+  return () => {
+    server.middlewares.use((req, res, next) => {
+        console.log('[前置中间件]', req.url)
+        next()
+      })
+  }
+}
+```
+
+- 模块处理阶段
+resolveId	   模块解析时	     解析模块 ID
+load	       模块加载时	     获取模块源码
+transform	   模块转换时	     修改模块源码
+
+- 开发服务器关闭 生产构建结束
+
+buildStart: 构建流程开始时调用。在 Vite 开发模式中，也会在开发服务器启动时调用一次。
+常用于：
+- 初始化插件状态。
+- 读取项目文件。
+- 初始化缓存。
+- 准备构建所需的数据。
+buildEnd: 构建结束时调用，适合做收尾处理。
+closeBundle: 构建结束或开发服务器关闭时调用，适合清理资源。
+Vite 8 的开发服务器中，Rolldown 钩子 options、buildStart 在服务器启动时调用；服务器关闭时会调用 buildEnd、closeBundle
+
+
+
+
+
